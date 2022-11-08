@@ -81,7 +81,7 @@ type LegacyBlock struct {
 	finalized     bool
 	timestamp     timestamp_t
 	baseFeePerGas wei_t
-	transactions  cTransactionArray
+	transactions  cArray[LegacyTransaction]
 	// tx_hashes     cStringArray
 	// name          string_q
 	// unclesCnt     uint64_t
@@ -165,21 +165,26 @@ func ReadLegacyBlock(reader *bufio.Reader) (block LegacyBlock, err error) {
 	}
 	block.baseFeePerGas = baseFeePerGas
 
-	var txCount uint64 = 0
-	err = read(&txCount)
+	// var txCount uint64 = 0
+	// err = read(&txCount)
+	// if err != nil {
+	// 	return
+	// }
+
+	// txs := make([]*LegacyTransaction, int(txCount))
+	// for i := 0; uint64(i) < txCount; i++ {
+	// 	tx, terr := ReadTransaction(reader)
+	// 	err = terr
+	// 	if err != nil {
+	// 		return
+	// 	}
+	// 	txs = append(txs, tx)
+	// }
+	transactions, err := readComplexArray(reader, ReadTransaction)
 	if err != nil {
 		return
 	}
-
-	txs := make([]*LegacyTransaction, int(txCount))
-	for i := 0; uint64(i) < txCount; i++ {
-		tx, terr := ReadTransaction(reader)
-		err = terr
-		if err != nil {
-			return
-		}
-		txs = append(txs, tx)
-	}
+	block.transactions = transactions
 
 	return
 }

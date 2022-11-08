@@ -273,8 +273,8 @@ func readCacheHeader(reader *bufio.Reader, target *CacheHeader) (err error) {
 	return
 }
 
-func ReadTransaction(reader *bufio.Reader) (tr *LegacyTransaction, err error) {
-	tr = &LegacyTransaction{}
+func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
+	tr = LegacyTransaction{}
 	read := func(data any) error {
 		return binary.Read(reader, binary.LittleEndian, data)
 	}
@@ -389,8 +389,6 @@ func ReadTransaction(reader *bufio.Reader) (tr *LegacyTransaction, err error) {
 	if err != nil {
 		return
 	}
-
-	// The next readCppString causes error
 
 	receipt, err := ReadReceipt(reader)
 	if err != nil {
