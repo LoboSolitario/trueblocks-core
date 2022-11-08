@@ -3,14 +3,15 @@ package cache
 import (
 	"bufio"
 	"encoding/binary"
-	"math/big"
 )
 
 type uint8_t = uint8
 type uint32_t = uint32
+type double = float32
+type unsignedShort = uint32
 
-type LegacyReceipt struct {
-	CacheHeader
+type CReceipt struct {
+	cacheHeader
 
 	contractAddress address_t
 	// cumulativeGasUsed wei_t
@@ -21,7 +22,7 @@ type LegacyReceipt struct {
 	status uint32_t
 }
 type CLogEntry struct {
-	CacheHeader
+	cacheHeader
 
 	address address_t
 	// blockHash           hash_t
@@ -39,8 +40,8 @@ type CLogEntry struct {
 	// removed             bool
 }
 type CTopic = string_q
-type cTrace struct {
-	CacheHeader
+type CTrace struct {
+	cacheHeader
 
 	blockHash        hash_t
 	blockNumber      blknum_t
@@ -50,13 +51,14 @@ type cTrace struct {
 	transactionIndex blknum_t
 	traceType        string_q
 	error            string_q
-	action           cTraceAction
-	result           cTraceResult
+	action           CTraceAction
+	result           CTraceResult
 	articulatedTrace CFunction
 	// compressedTrace  string_q
 }
-type cTraceAction struct {
-	CacheHeader
+type cTraceArray = cArray[CTrace]
+type CTraceAction struct {
+	cacheHeader
 
 	selfDestructed address_t
 	balance        wei_t
@@ -69,8 +71,8 @@ type cTraceAction struct {
 	to             address_t
 	value          wei_t
 }
-type cTraceResult struct {
-	CacheHeader
+type CTraceResult struct {
+	cacheHeader
 
 	newContract address_t
 	code        string_q
@@ -78,7 +80,7 @@ type cTraceResult struct {
 	output      string_q
 }
 type CFunction struct {
-	CacheHeader
+	cacheHeader
 
 	name            string_q
 	functionType    string_q
@@ -93,7 +95,7 @@ type CFunction struct {
 	outputs cArray[CParameter]
 }
 type CParameter struct {
-	CacheHeader
+	cacheHeader
 
 	parameterType string_q
 	name          string_q
@@ -111,62 +113,56 @@ type CParameter struct {
 	// example       string_q
 	// description   string_q
 }
-type CReconciliation struct {
-	CacheHeader
 
-	blockNumber         blknum_t
-	transactionIndex    blknum_t
-	timestamp           timestamp_t
-	assetAddr           address_t
-	assetSymbol         string_q
-	decimals            uint64_t
-	prevBlk             blknum_t
-	prevBlkBal          bigint_t
-	begBal              bigint_t
-	endBal              bigint_t
-	amountIn            bigint_t
-	internalIn          bigint_t
-	selfDestructIn      bigint_t
-	minerBaseRewardIn   bigint_t
-	minerNephewRewardIn bigint_t
-	minerTxFeeIn        bigint_t
-	minerUncleRewardIn  bigint_t
-	prefundIn           bigint_t
-	amountOut           bigint_t
-	internalOut         bigint_t
-	selfDestructOut     bigint_t
-	gasCostOut          bigint_t
-	reconciliationType  string_q
-	spotPrice           double
-	priceSource         string_q
-}
+// type CReconciliation struct {
+// 	cacheHeader
 
-// TODO: length of float can be wrong
-type double = float32
+// 	blockNumber         blknum_t
+// 	transactionIndex    blknum_t
+// 	timestamp           timestamp_t
+// 	assetAddr           address_t
+// 	assetSymbol         string_q
+// 	decimals            uint64_t
+// 	prevBlk             blknum_t
+// 	prevBlkBal          bigint_t
+// 	begBal              bigint_t
+// 	endBal              bigint_t
+// 	amountIn            bigint_t
+// 	internalIn          bigint_t
+// 	selfDestructIn      bigint_t
+// 	minerBaseRewardIn   bigint_t
+// 	minerNephewRewardIn bigint_t
+// 	minerTxFeeIn        bigint_t
+// 	minerUncleRewardIn  bigint_t
+// 	prefundIn           bigint_t
+// 	amountOut           bigint_t
+// 	internalOut         bigint_t
+// 	selfDestructOut     bigint_t
+// 	gasCostOut          bigint_t
+// 	reconciliationType  string_q
+// 	spotPrice           double
+// 	priceSource         string_q
+// }
+// type cReconciliationArray = cArray[CReconciliation]
 
-type cComplexType interface {
-	// TODO: string is not complex type
+type cArrayItem interface {
 	string_q |
-		LegacyTransaction |
-		LegacyReceipt |
-		cTrace |
-		CReconciliation |
+		CTransaction |
+		CReceipt |
+		CTrace |
+		// CReconciliation |
 		CLogEntry |
 		CFunction |
 		CParameter
 }
 
-type cArray[UnderlyingType cComplexType] struct {
+type cArray[Item cArrayItem] struct {
 	size  unsignedLong
-	items []UnderlyingType
+	items []Item
 }
 
-type CReceipt = LegacyReceipt
-type CTraceArray = cArray[cTrace]
-type CReconciliationArray = cArray[CReconciliation]
-
-type LegacyTransaction struct {
-	CacheHeader
+type CTransaction struct {
+	cacheHeader
 
 	hash                 hash_t
 	blockHash            hash_t
@@ -189,56 +185,8 @@ type LegacyTransaction struct {
 	cachebits            uint8_t
 	reserved2            uint8_t
 	receipt              CReceipt
-	traces               CTraceArray
+	traces               cTraceArray
 	articulatedTx        CFunction
-	compressedTx         string_q
-	statements           CReconciliationArray
-	finalized            bool
-}
-
-// TODO: length of this uint can be wrong
-type unsignedShort = uint32
-
-type bigint_t struct {
-	base  unsignedShort
-	value []byte // big.Int
-}
-
-func readBigInt(reader *bufio.Reader, target bigint_t) (bigint *big.Int, err error) {
-	// First, read base
-	var base unsignedShort
-	base = 0
-	err = binary.Read(reader, binary.LittleEndian, &base)
-	if err != nil {
-		return
-	}
-	// Now, read the value (it is stored as string)
-	stringValue := string_q{}
-	err = readCppString(reader, &stringValue)
-	if err != nil {
-		return
-	}
-
-	// Try to parse the value
-	// bigint := big.Int{}
-	bigint.SetString(string(stringValue.content), int(base))
-	return
-}
-
-// TODO: this fn should operate only on simple types (like []string_q) and
-// it should not accept cComplexType
-func readArray[UnderlyingType cComplexType](reader *bufio.Reader, target cArray[UnderlyingType]) (err error) {
-	err = binary.Read(reader, binary.LittleEndian, &target.size)
-	if err != nil {
-		return
-	}
-	target.items = make([]UnderlyingType, target.size)
-	err = binary.Read(reader, binary.LittleEndian, target.items)
-	if err != nil {
-		return
-	}
-
-	return
 }
 
 func createReadFn(reader *bufio.Reader) func(data any) error {
@@ -247,7 +195,7 @@ func createReadFn(reader *bufio.Reader) func(data any) error {
 	}
 }
 
-func readCacheHeader(reader *bufio.Reader, target *CacheHeader) (err error) {
+func readCacheHeader(reader *bufio.Reader, target *cacheHeader) (err error) {
 	read := createReadFn(reader)
 
 	err = read(&target.deleted)
@@ -265,7 +213,7 @@ func readCacheHeader(reader *bufio.Reader, target *CacheHeader) (err error) {
 		return
 	}
 
-	err = readCppString(reader, &target.className)
+	err = readString(reader, &target.className)
 	if err != nil {
 		return err
 	}
@@ -273,23 +221,21 @@ func readCacheHeader(reader *bufio.Reader, target *CacheHeader) (err error) {
 	return
 }
 
-func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
-	tr = LegacyTransaction{}
-	read := func(data any) error {
-		return binary.Read(reader, binary.LittleEndian, data)
-	}
+func ReadTransaction(reader *bufio.Reader) (tr CTransaction, err error) {
+	tr = CTransaction{}
+	read := createReadFn(reader)
 
-	err = readCacheHeader(reader, &tr.CacheHeader)
+	err = readCacheHeader(reader, &tr.cacheHeader)
 	if err != nil {
 		return
 	}
-	err = readCppString(reader, &tr.hash)
+	err = readString(reader, &tr.hash)
 
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &tr.blockHash)
+	err = readString(reader, &tr.blockHash)
 	if err != nil {
 		return
 	}
@@ -314,31 +260,28 @@ func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
 		return
 	}
 
-	err = readCppString(reader, &tr.from)
+	err = readString(reader, &tr.from)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &tr.to)
+	err = readString(reader, &tr.to)
 	if err != nil {
 		return
 	}
 
-	// err = read(&tr.value)
 	value, err := readBigUint(reader)
 	if err != nil {
 		return
 	}
 	tr.value = value
 
-	// err = read(&tr.extraValue1)
 	extraValue, err := readBigUint(reader)
 	if err != nil {
 		return
 	}
 	tr.extraValue1 = extraValue
 
-	// err = read(&tr.extraValue2)
 	extraValue, err = readBigUint(reader)
 	if err != nil {
 		return
@@ -365,7 +308,7 @@ func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
 		return
 	}
 
-	err = readCppString(reader, &tr.input)
+	err = readString(reader, &tr.input)
 	if err != nil {
 		return
 	}
@@ -396,7 +339,7 @@ func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
 	}
 	tr.receipt = *receipt
 
-	traces, err := readComplexArray(reader, ReadCTrace)
+	traces, err := readArray(reader, ReadTrace)
 	if err != nil {
 		return
 	}
@@ -408,35 +351,19 @@ func ReadTransaction(reader *bufio.Reader) (tr LegacyTransaction, err error) {
 	}
 	tr.articulatedTx = articulatedTx
 
-	// err = readCppString(reader, &tr.compressedTx)
-	// if err != nil {
-	// 	return
-	// }
-
-	// statements, err := readComplexArray(reader, readReconciliation)
-	// if err != nil {
-	// 	return
-	// }
-	// tr.statements = statements
-
-	// err = read(&tr.finalized)
-	// if err != nil {
-	// 	return
-	// }
-
 	return
 }
 
-func ReadReceipt(reader *bufio.Reader) (receipt *LegacyReceipt, err error) {
-	receipt = &LegacyReceipt{}
+func ReadReceipt(reader *bufio.Reader) (receipt *CReceipt, err error) {
+	receipt = &CReceipt{}
 	read := createReadFn(reader)
 
-	err = readCacheHeader(reader, &receipt.CacheHeader)
+	err = readCacheHeader(reader, &receipt.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &receipt.contractAddress)
+	err = readString(reader, &receipt.contractAddress)
 	if err != nil {
 		return
 	}
@@ -451,13 +378,12 @@ func ReadReceipt(reader *bufio.Reader) (receipt *LegacyReceipt, err error) {
 		return
 	}
 
-	logs, err := readComplexArray(reader, ReadCLog)
+	logs, err := readArray(reader, ReadLog)
 	if err != nil {
 		return
 	}
 	receipt.logs = logs
 
-	// status is 1, but in output null
 	err = read(&receipt.status)
 	if err != nil {
 		return
@@ -466,15 +392,15 @@ func ReadReceipt(reader *bufio.Reader) (receipt *LegacyReceipt, err error) {
 	return
 }
 
-func ReadCLog(reader *bufio.Reader) (log CLogEntry, err error) {
+func ReadLog(reader *bufio.Reader) (log CLogEntry, err error) {
 	log = CLogEntry{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &log.CacheHeader)
+	err = readCacheHeader(reader, &log.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &log.address)
+	err = readString(reader, &log.address)
 	if err != nil {
 		return
 	}
@@ -484,16 +410,13 @@ func ReadCLog(reader *bufio.Reader) (log CLogEntry, err error) {
 		return
 	}
 
-	topics, err := readComplexArray(reader, func(reader *bufio.Reader) (s string_q, err error) {
-		err = readCppString(reader, &s)
-		return
-	})
+	topics, err := readArray(reader, readStringArrayItem)
 	if err != nil {
 		return
 	}
 	log.topics = topics
 
-	err = readCppString(reader, &log.data)
+	err = readString(reader, &log.data)
 	if err != nil {
 		return
 	}
@@ -510,22 +433,22 @@ func ReadCLog(reader *bufio.Reader) (log CLogEntry, err error) {
 func ReadFunction(reader *bufio.Reader) (function CFunction, err error) {
 	function = CFunction{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &function.CacheHeader)
+	err = readCacheHeader(reader, &function.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &function.name)
+	err = readString(reader, &function.name)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &function.functionType)
+	err = readString(reader, &function.functionType)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &function.abi_source)
+	err = readString(reader, &function.abi_source)
 	if err != nil {
 		return
 	}
@@ -540,28 +463,28 @@ func ReadFunction(reader *bufio.Reader) (function CFunction, err error) {
 		return
 	}
 
-	err = readCppString(reader, &function.stateMutability)
+	err = readString(reader, &function.stateMutability)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &function.signature)
+	err = readString(reader, &function.signature)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &function.encoding)
+	err = readString(reader, &function.encoding)
 	if err != nil {
 		return
 	}
 
-	inputs, err := readComplexArray(reader, ReadCParameter)
+	inputs, err := readArray(reader, ReadParameter)
 	if err != nil {
 		return
 	}
 	function.inputs = inputs
 
-	outputs, err := readComplexArray(reader, ReadCParameter)
+	outputs, err := readArray(reader, ReadParameter)
 	if err != nil {
 		return
 	}
@@ -570,30 +493,30 @@ func ReadFunction(reader *bufio.Reader) (function CFunction, err error) {
 	return
 }
 
-func ReadCParameter(reader *bufio.Reader) (param CParameter, err error) {
+func ReadParameter(reader *bufio.Reader) (param CParameter, err error) {
 	param = CParameter{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &param.CacheHeader)
+	err = readCacheHeader(reader, &param.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &param.parameterType)
+	err = readString(reader, &param.parameterType)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &param.name)
+	err = readString(reader, &param.name)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &param.strDefault)
+	err = readString(reader, &param.strDefault)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &param.value)
+	err = readString(reader, &param.value)
 	if err != nil {
 		return
 	}
@@ -603,12 +526,12 @@ func ReadCParameter(reader *bufio.Reader) (param CParameter, err error) {
 		return
 	}
 
-	err = readCppString(reader, &param.internalType)
+	err = readString(reader, &param.internalType)
 	if err != nil {
 		return
 	}
 
-	components, err := readComplexArray(reader, ReadCParameter)
+	components, err := readArray(reader, ReadParameter)
 	if err != nil {
 		return
 	}
@@ -627,15 +550,15 @@ func ReadCParameter(reader *bufio.Reader) (param CParameter, err error) {
 	return
 }
 
-func ReadCTrace(reader *bufio.Reader) (trace cTrace, err error) {
-	trace = cTrace{}
+func ReadTrace(reader *bufio.Reader) (trace CTrace, err error) {
+	trace = CTrace{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &trace.CacheHeader)
+	err = readCacheHeader(reader, &trace.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &trace.blockHash)
+	err = readString(reader, &trace.blockHash)
 	if err != nil {
 		return
 	}
@@ -650,8 +573,8 @@ func ReadCTrace(reader *bufio.Reader) (trace cTrace, err error) {
 		return
 	}
 
-	addrs, err := readComplexArray(reader, func(reader *bufio.Reader) (s string_q, err error) {
-		err = readCppString(reader, &s)
+	addrs, err := readArray(reader, func(reader *bufio.Reader) (s string_q, err error) {
+		err = readString(reader, &s)
 		return
 	})
 	if err != nil {
@@ -659,7 +582,7 @@ func ReadCTrace(reader *bufio.Reader) (trace cTrace, err error) {
 	}
 	trace.traceAddress = addrs
 
-	err = readCppString(reader, &trace.transactionHash)
+	err = readString(reader, &trace.transactionHash)
 	if err != nil {
 		return
 	}
@@ -669,12 +592,12 @@ func ReadCTrace(reader *bufio.Reader) (trace cTrace, err error) {
 		return
 	}
 
-	err = readCppString(reader, &trace.traceType)
+	err = readString(reader, &trace.traceType)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &trace.error)
+	err = readString(reader, &trace.error)
 	if err != nil {
 		return
 	}
@@ -700,32 +623,31 @@ func ReadCTrace(reader *bufio.Reader) (trace cTrace, err error) {
 	return
 }
 
-func readTraceAction(reader *bufio.Reader) (action cTraceAction, err error) {
-	action = cTraceAction{}
+func readTraceAction(reader *bufio.Reader) (action CTraceAction, err error) {
+	action = CTraceAction{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &action.CacheHeader)
+	err = readCacheHeader(reader, &action.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &action.selfDestructed)
+	err = readString(reader, &action.selfDestructed)
 	if err != nil {
 		return
 	}
 
-	// err = read(&action.balance)
 	balance, err := readBigUint(reader)
 	if err != nil {
 		return
 	}
 	action.balance = balance
 
-	err = readCppString(reader, &action.callType)
+	err = readString(reader, &action.callType)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &action.from)
+	err = readString(reader, &action.from)
 	if err != nil {
 		return
 	}
@@ -735,27 +657,26 @@ func readTraceAction(reader *bufio.Reader) (action cTraceAction, err error) {
 		return
 	}
 
-	err = readCppString(reader, &action.init)
+	err = readString(reader, &action.init)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &action.input)
+	err = readString(reader, &action.input)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &action.refundAddress)
+	err = readString(reader, &action.refundAddress)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &action.to)
+	err = readString(reader, &action.to)
 	if err != nil {
 		return
 	}
 
-	// err = read(&action.value)
 	value, err := readBigUint(reader)
 	if err != nil {
 		return
@@ -765,20 +686,20 @@ func readTraceAction(reader *bufio.Reader) (action cTraceAction, err error) {
 	return
 }
 
-func readTraceResult(reader *bufio.Reader) (result cTraceResult, err error) {
-	result = cTraceResult{}
+func readTraceResult(reader *bufio.Reader) (result CTraceResult, err error) {
+	result = CTraceResult{}
 	read := createReadFn(reader)
-	err = readCacheHeader(reader, &result.CacheHeader)
+	err = readCacheHeader(reader, &result.cacheHeader)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &result.newContract)
+	err = readString(reader, &result.newContract)
 	if err != nil {
 		return
 	}
 
-	err = readCppString(reader, &result.code)
+	err = readString(reader, &result.code)
 	if err != nil {
 		return
 	}
@@ -788,7 +709,7 @@ func readTraceResult(reader *bufio.Reader) (result cTraceResult, err error) {
 		return
 	}
 
-	err = readCppString(reader, &result.output)
+	err = readString(reader, &result.output)
 	if err != nil {
 		return
 	}
@@ -796,157 +717,154 @@ func readTraceResult(reader *bufio.Reader) (result cTraceResult, err error) {
 	return
 }
 
-func readReconciliation(reader *bufio.Reader) (recon CReconciliation, err error) {
-	recon = CReconciliation{}
-	read := createReadFn(reader)
-	err = readCacheHeader(reader, &recon.CacheHeader)
-	if err != nil {
-		return
-	}
+// func readReconciliation(reader *bufio.Reader) (recon CReconciliation, err error) {
+// 	recon = CReconciliation{}
+// 	read := createReadFn(reader)
+// 	err = readCacheHeader(reader, &recon.cacheHeader)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.blockNumber)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.blockNumber)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.transactionIndex)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.transactionIndex)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.timestamp)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.timestamp)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = readCppString(reader, &recon.assetAddr)
-	if err != nil {
-		return
-	}
+// 	err = readString(reader, &recon.assetAddr)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = readCppString(reader, &recon.assetSymbol)
-	if err != nil {
-		return
-	}
+// 	err = readString(reader, &recon.assetSymbol)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.decimals)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.decimals)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.prevBlk)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.prevBlk)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.prevBlkBal)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.prevBlkBal)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.begBal)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.begBal)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.endBal)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.endBal)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.amountIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.amountIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.internalIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.internalIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.selfDestructIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.selfDestructIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.minerBaseRewardIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.minerBaseRewardIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.minerNephewRewardIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.minerNephewRewardIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.minerTxFeeIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.minerTxFeeIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.minerUncleRewardIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.minerUncleRewardIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.prefundIn)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.prefundIn)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.amountOut)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.amountOut)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.internalOut)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.internalOut)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.selfDestructOut)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.selfDestructOut)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.gasCostOut)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.gasCostOut)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = readCppString(reader, &recon.reconciliationType)
-	if err != nil {
-		return
-	}
+// 	err = readString(reader, &recon.reconciliationType)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = read(&recon.spotPrice)
-	if err != nil {
-		return
-	}
+// 	err = read(&recon.spotPrice)
+// 	if err != nil {
+// 		return
+// 	}
 
-	err = readCppString(reader, &recon.priceSource)
-	if err != nil {
-		return
-	}
+// 	err = readString(reader, &recon.priceSource)
+// 	if err != nil {
+// 		return
+// 	}
 
-	return
-}
+// 	return
+// }
 
-func readComplexArray[T cComplexType](
+func readArray[Item cArrayItem](
 	reader *bufio.Reader,
-	readValue func(reader *bufio.Reader) (T, error),
-) (results cArray[T], err error) {
+	readValue func(reader *bufio.Reader) (Item, error),
+) (results cArray[Item], err error) {
 	var itemCount unsignedLong = 0
-	err = binary.Read(reader, binary.LittleEndian, &itemCount)
+	read := createReadFn(reader)
+	err = read(&itemCount)
 	if err != nil {
 		return
 	}
 
-	// if itemCount == 0 {
-	// 	return
-	// }
-
-	items := make([]T, itemCount)
+	items := make([]Item, itemCount)
 	for i := 0; uint64(i) < itemCount; i++ {
 		value, rerr := readValue(reader)
 		err = rerr
@@ -955,7 +873,7 @@ func readComplexArray[T cComplexType](
 		}
 		items[i] = value
 	}
-	results = cArray[T]{
+	results = cArray[Item]{
 		size:  itemCount,
 		items: items,
 	}
