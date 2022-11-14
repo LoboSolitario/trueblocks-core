@@ -55,6 +55,8 @@ class CStatementManager {
     recon_t which{REC_NONE};
     CAddressBoolMap assetFilter;
     CAppearanceArray_mon appArray;
+    CPreviousBalanceMap previousBalances;
+    CTransferArray transfers;
     void getPrevNext(bool simple, size_t index, const CTransaction& trans);
     bool getTransfers(const CTransaction& trans);
     bool getStatements(CTransaction& trans);
@@ -65,8 +67,6 @@ class CStatementManager {
 
   private:
     CStatementManager(){};
-    CPreviousBalanceMap previousBalances;
-    CTransferArray transfers;
 };
 
 }  // namespace qblocks

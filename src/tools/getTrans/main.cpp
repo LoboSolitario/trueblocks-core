@@ -103,6 +103,10 @@ bool visitTransaction(CTransaction& trans, void* data) {
     LOG4("blockNumber.txid: ", trans.blockNumber, "\t", trans.transactionIndex);
 
     COptions* opt = reinterpret_cast<COptions*>(data);
+    if (opt->source) {
+        return visitSource(trans, opt);
+    }
+
     bool isText = (expContext().exportFmt & (TXT1 | CSV1));
     CBlock block;
 

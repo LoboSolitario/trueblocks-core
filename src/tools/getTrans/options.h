@@ -29,6 +29,7 @@ class COptions : public CStatementOptions {
     bool uniq;
     string_q flow;
     bool cache;
+    bool source;
     // END_CODE_DECLARE
 
     COptionsTransList transList;
@@ -43,3 +44,4 @@ class COptions : public CStatementOptions {
 //-----------------------------------------------------------------------------
 extern bool visitTransaction(CTransaction& trans, void* data);
 extern bool visitReconciliation(CTransaction& trans, void* data);
+extern bool visitSource(CTransaction& trans, void* data);

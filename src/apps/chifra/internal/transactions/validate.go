@@ -47,6 +47,8 @@ func (opts *TransactionsOptions) validateTransactions() error {
 			if !validate.IsValidAddress(opts.AccountFor) {
 				return validate.Usage("Invalid reconcilation address {0}.", opts.AccountFor)
 			}
+		} else if opts.Source {
+			return validate.Usage("The {0} option requires the {1} option", "--source", "--account_for")
 		}
 
 		if opts.Trace && !rpcClient.IsTracingNode(opts.Globals.TestMode, opts.Globals.Chain) {
