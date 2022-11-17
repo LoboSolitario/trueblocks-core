@@ -2,6 +2,8 @@ package cache
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"math/big"
 	"os"
 	"strings"
@@ -12,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func helperCheckSimpleTransaction(t *testing.T, tr *types.SimpleTransaction, expected *types.SimpleTransaction) (err error) {
+func helperCheckTransaction(t *testing.T, tr *types.SimpleTransaction, expected *types.SimpleTransaction) (err error) {
 	if tr.Hash.String() != expected.Hash.String() {
 		t.Fatal("mismatched transaction hash", tr.Hash.String())
 	}
@@ -95,14 +97,14 @@ func helperCheckSimpleTransaction(t *testing.T, tr *types.SimpleTransaction, exp
 	return
 }
 
-func TestReadSimpleBlock(t *testing.T) {
+func TestReadBlock(t *testing.T) {
 	f, err := os.Open("./cache_block.bin")
 	defer f.Close()
 	buf := bufio.NewReader(f)
 	if err != nil {
 		t.Fatal("cannot open file")
 	}
-	block, err := ReadBlockSimple(buf)
+	block, err := ReadBlock(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +148,7 @@ func TestReadSimpleBlock(t *testing.T) {
 		t.Fatal("invalid baseFeePerGas")
 	}
 
-	helperCheckSimpleTransaction(t, &block.Transactions[0], &types.SimpleTransaction{
+	helperCheckTransaction(t, &block.Transactions[0], &types.SimpleTransaction{
 		Hash:                 common.HexToHash("0x5a9d77909e77eee0a768d4160155c60fa77ae5b621e3c6f4fe6c54f509ea8c33"),
 		BlockHash:            common.HexToHash("0x51bc754831f33817e755039d90af3b20ea1e21905529ddaa03d7ba9f5fc9e66f"),
 		BlockNumber:          4369999,
@@ -192,7 +194,7 @@ func TestReadSimpleBlock(t *testing.T) {
 
 	expectedValue := big.NewInt(0)
 	expectedValue.UnmarshalText([]byte("921920000000000"))
-	helperCheckSimpleTransaction(t, &block.Transactions[8], &types.SimpleTransaction{
+	helperCheckTransaction(t, &block.Transactions[8], &types.SimpleTransaction{
 		Hash:                 common.HexToHash("0x5589ddfd9db108fc6be96c68df9fdcc89a0673fde85fb4089653334bb8c1fc71"),
 		BlockHash:            common.HexToHash("0x51bc754831f33817e755039d90af3b20ea1e21905529ddaa03d7ba9f5fc9e66f"),
 		BlockNumber:          4369999,
@@ -215,4 +217,29 @@ func TestReadSimpleBlock(t *testing.T) {
 			Status:            1,
 		},
 	})
+}
+
+func Test_readCString(t *testing.T) {
+	source := bytes.NewBuffer([]byte{})
+	err := binary.Write(source, binary.LittleEndian, uint64(6))
+	if err != nil {
+		t.Fatal("while preparing test data:", err)
+	}
+	err = binary.Write(source, binary.LittleEndian, []byte("CBlock"))
+	if err != nil {
+		t.Fatal("while preparing test data:", err)
+	}
+
+	result := cString{}
+	buf := bufio.NewReader(source)
+	err = readCString(buf, &result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.size != 6 {
+		t.Fatal("wrong size:", result.size)
+	}
+	if string(result.content) != "CBlock" {
+		t.Fatal("wrong content:", result.content)
+	}
 }

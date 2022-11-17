@@ -12,12 +12,16 @@ import (
 
 type readBytes = func(data any) error
 
+// createReadFn returns function that reads bytes from `reader` with
+// the correct endianness
 func createReadFn(reader *bufio.Reader) readBytes {
 	return func(data any) error {
 		return binary.Read(reader, binary.LittleEndian, data)
 	}
 }
 
+// This generic type describes what can be array item in cache binary
+// files
 type ArrayItem interface {
 	~string |
 		common.Hash |
@@ -28,11 +32,13 @@ type ArrayItem interface {
 		types.SimpleLog
 }
 
-func mapArray[Item ArrayItem](
+// readFromArray converts binary array into slice of type Item
+func readFromArray[Item ArrayItem](
 	reader *bufio.Reader,
 	target *[]Item,
 	readValue func(reader *bufio.Reader) (*Item, error),
 ) (err error) {
+	// first, read item count
 	var itemCount uint64 = 0
 	read := createReadFn(reader)
 	err = read(&itemCount)
@@ -40,9 +46,10 @@ func mapArray[Item ArrayItem](
 		return
 	}
 
+	// make target large enough
 	*target = make([]Item, 0, itemCount)
 
-	// result := make([]Item, itemCount)
+	// read items
 	for i := 0; uint64(i) < itemCount; i++ {
 		item, readErr := readValue(reader)
 		if readErr != nil {
@@ -53,16 +60,13 @@ func mapArray[Item ArrayItem](
 		*target = append(*target, *item)
 	}
 
-	// target = target[:len(result)]
-	// *target = append(*target, result...)
-	// copy(*target, result)
 	return
 }
 
-// readString reads cString structure from reader. It has different signature than
+// readCString reads cString structure from reader. It has different signature than
 // the rest of `read*` functions in this package, to ease reading values into
 // other structs' fields
-func readString(reader *bufio.Reader, str *cString) (err error) {
+func readCString(reader *bufio.Reader, str *cString) (err error) {
 	read := createReadFn(reader)
 	err = read(&str.size)
 	if err != nil {
@@ -79,7 +83,7 @@ func readString(reader *bufio.Reader, str *cString) (err error) {
 
 func readAddress(reader *bufio.Reader, target *common.Address) (err error) {
 	str := &cString{}
-	err = readString(reader, str)
+	err = readCString(reader, str)
 	if err != nil {
 		return
 	}
@@ -90,7 +94,7 @@ func readAddress(reader *bufio.Reader, target *common.Address) (err error) {
 
 func readHash(reader *bufio.Reader, target *common.Hash) (err error) {
 	str := &cString{}
-	err = readString(reader, str)
+	err = readCString(reader, str)
 	if err != nil {
 		return
 	}
@@ -99,10 +103,9 @@ func readHash(reader *bufio.Reader, target *common.Hash) (err error) {
 	return
 }
 
-// TODO: rename
-func readJustString(reader *bufio.Reader, target *string) (err error) {
+func readString(reader *bufio.Reader, target *string) (err error) {
 	str := &cString{}
-	err = readString(reader, str)
+	err = readCString(reader, str)
 	if err != nil {
 		return
 	}
@@ -111,31 +114,33 @@ func readJustString(reader *bufio.Reader, target *string) (err error) {
 	return
 }
 
+// What can be base of biguint?
 type bignumBase interface {
 	uint64
 }
-type biguint_t[Base bignumBase] struct {
+type biguint[Base bignumBase] struct {
 	capacity int32
 	len      int32
 	items    []Base
 }
 
-func readBigUint[Base bignumBase](reader *bufio.Reader) (biguint biguint_t[Base], err error) {
+func readBigUint[Base bignumBase](reader *bufio.Reader) (result biguint[Base], err error) {
 	read := createReadFn(reader)
-	err = read(&biguint.capacity)
+	err = read(&result.capacity)
 	if err != nil {
 		return
 	}
-	err = read(&biguint.len)
+	err = read(&result.len)
 	if err != nil {
 		return
 	}
 
-	biguint.items = make([]Base, biguint.len)
-	err = read(&biguint.items)
+	result.items = make([]Base, result.len)
+	err = read(&result.items)
 	return
 }
 
+// parseBigUint reads biguint from cache file and converts it to Go's big.Int
 func parseBigUint(reader *bufio.Reader, target *big.Int) (err error) {
 	cBigUint, err := readBigUint(reader)
 	if err != nil {
@@ -150,7 +155,10 @@ func parseBigUint(reader *bufio.Reader, target *big.Int) (err error) {
 	return
 }
 
-func turnToArrayItem[Item ArrayItem](
+// makeArrayItemRead takes a function that reads bytes and changes variable's value
+// and turns it into a function returning a value. Such a function can then be provided
+// to `readFromArray` to read and convert array items
+func makeArrayItemRead[Item ArrayItem](
 	reader *bufio.Reader,
 	readAndSetValue func(reader *bufio.Reader, target *Item) (err error),
 ) func(reader *bufio.Reader) (value *Item, err error) {
@@ -168,9 +176,7 @@ func readTimestamp(read readBytes, target *time.Time) (err error) {
 	if err != nil {
 		return
 	}
-	// TODO: this seems not to work
 	*target = time.Unix(rawTimestamp, 0)
-
 	return
 }
 
@@ -202,7 +208,7 @@ func readCacheHeader(reader *bufio.Reader, target *cacheHeader) (err error) {
 		return
 	}
 
-	err = readString(reader, &target.className)
+	err = readCString(reader, &target.className)
 	if err != nil {
 		return err
 	}
@@ -210,7 +216,7 @@ func readCacheHeader(reader *bufio.Reader, target *cacheHeader) (err error) {
 	return
 }
 
-func ReadBlockSimple(reader *bufio.Reader) (block *types.SimpleBlock, err error) {
+func ReadBlock(reader *bufio.Reader) (block *types.SimpleBlock, err error) {
 	block = &types.SimpleBlock{}
 	read := createReadFn(reader)
 
@@ -266,7 +272,7 @@ func ReadBlockSimple(reader *bufio.Reader) (block *types.SimpleBlock, err error)
 		return
 	}
 
-	err = mapArray(reader, &block.Transactions, ReadSimpleTransaction)
+	err = readFromArray(reader, &block.Transactions, ReadTransaction)
 	if err != nil {
 		return
 	}
@@ -274,7 +280,7 @@ func ReadBlockSimple(reader *bufio.Reader) (block *types.SimpleBlock, err error)
 	return
 }
 
-func ReadSimpleTransaction(reader *bufio.Reader) (tx *types.SimpleTransaction, err error) {
+func ReadTransaction(reader *bufio.Reader) (tx *types.SimpleTransaction, err error) {
 	tx = &types.SimpleTransaction{}
 	read := createReadFn(reader)
 
@@ -358,7 +364,7 @@ func ReadSimpleTransaction(reader *bufio.Reader) (tx *types.SimpleTransaction, e
 		return
 	}
 
-	err = readJustString(reader, &tx.Input)
+	err = readString(reader, &tx.Input)
 	if err != nil {
 		return
 	}
@@ -383,18 +389,18 @@ func ReadSimpleTransaction(reader *bufio.Reader) (tx *types.SimpleTransaction, e
 		return
 	}
 
-	receipt, err := ReadSimpleReceipt(reader)
+	receipt, err := ReadReceipt(reader)
 	if err != nil {
 		return
 	}
 	tx.Receipt = receipt
 
-	err = mapArray(reader, &tx.Traces, ReadSimpleTrace)
+	err = readFromArray(reader, &tx.Traces, ReadTrace)
 	if err != nil {
 		return
 	}
 
-	articulatedTx, err := ReadSimpleFunction(reader)
+	articulatedTx, err := ReadFunction(reader)
 	if err != nil {
 		return
 	}
@@ -403,7 +409,7 @@ func ReadSimpleTransaction(reader *bufio.Reader) (tx *types.SimpleTransaction, e
 	return
 }
 
-func ReadSimpleReceipt(reader *bufio.Reader) (receipt *types.SimpleReceipt, err error) {
+func ReadReceipt(reader *bufio.Reader) (receipt *types.SimpleReceipt, err error) {
 	receipt = &types.SimpleReceipt{}
 	read := createReadFn(reader)
 
@@ -427,7 +433,7 @@ func ReadSimpleReceipt(reader *bufio.Reader) (receipt *types.SimpleReceipt, err 
 		return
 	}
 
-	err = mapArray(reader, &receipt.Logs, ReadSimpleLog)
+	err = readFromArray(reader, &receipt.Logs, ReadLog)
 	if err != nil {
 		return
 	}
@@ -440,7 +446,7 @@ func ReadSimpleReceipt(reader *bufio.Reader) (receipt *types.SimpleReceipt, err 
 	return
 }
 
-func ReadSimpleLog(reader *bufio.Reader) (log *types.SimpleLog, err error) {
+func ReadLog(reader *bufio.Reader) (log *types.SimpleLog, err error) {
 	log = &types.SimpleLog{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -458,17 +464,17 @@ func ReadSimpleLog(reader *bufio.Reader) (log *types.SimpleLog, err error) {
 		return
 	}
 
-	err = mapArray(reader, &log.Topics, turnToArrayItem(reader, readHash))
+	err = readFromArray(reader, &log.Topics, makeArrayItemRead(reader, readHash))
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &log.Data)
+	err = readString(reader, &log.Data)
 	if err != nil {
 		return
 	}
 
-	articulatedLog, err := ReadSimpleFunction(reader)
+	articulatedLog, err := ReadFunction(reader)
 	if err != nil {
 		return
 	}
@@ -477,7 +483,7 @@ func ReadSimpleLog(reader *bufio.Reader) (log *types.SimpleLog, err error) {
 	return
 }
 
-func ReadSimpleFunction(reader *bufio.Reader) (function *types.SimpleFunction, err error) {
+func ReadFunction(reader *bufio.Reader) (function *types.SimpleFunction, err error) {
 	function = &types.SimpleFunction{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -485,17 +491,17 @@ func ReadSimpleFunction(reader *bufio.Reader) (function *types.SimpleFunction, e
 		return
 	}
 
-	err = readJustString(reader, &function.Name)
+	err = readString(reader, &function.Name)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &function.FunctionType)
+	err = readString(reader, &function.FunctionType)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &function.AbiSource)
+	err = readString(reader, &function.AbiSource)
 	if err != nil {
 		return
 	}
@@ -510,27 +516,27 @@ func ReadSimpleFunction(reader *bufio.Reader) (function *types.SimpleFunction, e
 		return
 	}
 
-	err = readJustString(reader, &function.StateMutability)
+	err = readString(reader, &function.StateMutability)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &function.Signature)
+	err = readString(reader, &function.Signature)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &function.Encoding)
+	err = readString(reader, &function.Encoding)
 	if err != nil {
 		return
 	}
 
-	err = mapArray(reader, &function.Inputs, ReadSimpleParameter)
+	err = readFromArray(reader, &function.Inputs, ReadParameter)
 	if err != nil {
 		return
 	}
 
-	err = mapArray(reader, &function.Outputs, ReadSimpleParameter)
+	err = readFromArray(reader, &function.Outputs, ReadParameter)
 	if err != nil {
 		return
 	}
@@ -538,7 +544,7 @@ func ReadSimpleFunction(reader *bufio.Reader) (function *types.SimpleFunction, e
 	return
 }
 
-func ReadSimpleParameter(reader *bufio.Reader) (param *types.SimpleParameter, err error) {
+func ReadParameter(reader *bufio.Reader) (param *types.SimpleParameter, err error) {
 	param = &types.SimpleParameter{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -546,22 +552,22 @@ func ReadSimpleParameter(reader *bufio.Reader) (param *types.SimpleParameter, er
 		return
 	}
 
-	err = readJustString(reader, &param.ParameterType)
+	err = readString(reader, &param.ParameterType)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &param.Name)
+	err = readString(reader, &param.Name)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &param.StrDefault)
+	err = readString(reader, &param.StrDefault)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &param.Value)
+	err = readString(reader, &param.Value)
 	if err != nil {
 		return
 	}
@@ -571,12 +577,12 @@ func ReadSimpleParameter(reader *bufio.Reader) (param *types.SimpleParameter, er
 		return
 	}
 
-	err = readJustString(reader, &param.InternalType)
+	err = readString(reader, &param.InternalType)
 	if err != nil {
 		return
 	}
 
-	err = mapArray(reader, &param.Components, ReadSimpleParameter)
+	err = readFromArray(reader, &param.Components, ReadParameter)
 	if err != nil {
 		return
 	}
@@ -594,7 +600,7 @@ func ReadSimpleParameter(reader *bufio.Reader) (param *types.SimpleParameter, er
 	return
 }
 
-func ReadSimpleTrace(reader *bufio.Reader) (trace *types.SimpleTrace, err error) {
+func ReadTrace(reader *bufio.Reader) (trace *types.SimpleTrace, err error) {
 	trace = &types.SimpleTrace{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -617,7 +623,7 @@ func ReadSimpleTrace(reader *bufio.Reader) (trace *types.SimpleTrace, err error)
 		return
 	}
 
-	err = mapArray(reader, &trace.TraceAddress, turnToArrayItem(reader, readJustString))
+	err = readFromArray(reader, &trace.TraceAddress, makeArrayItemRead(reader, readString))
 	if err != nil {
 		return
 	}
@@ -632,29 +638,29 @@ func ReadSimpleTrace(reader *bufio.Reader) (trace *types.SimpleTrace, err error)
 		return
 	}
 
-	err = readJustString(reader, &trace.TraceType)
+	err = readString(reader, &trace.TraceType)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &trace.Error)
+	err = readString(reader, &trace.Error)
 	if err != nil {
 		return
 	}
 
-	action, err := readSimpleTraceAction(reader)
+	action, err := readTraceAction(reader)
 	if err != nil {
 		return
 	}
 	trace.Action = action
 
-	result, err := readSimpleTraceResult(reader)
+	result, err := readTraceResult(reader)
 	if err != nil {
 		return
 	}
 	trace.Result = result
 
-	function, err := ReadSimpleFunction(reader)
+	function, err := ReadFunction(reader)
 	if err != nil {
 		return
 	}
@@ -663,7 +669,7 @@ func ReadSimpleTrace(reader *bufio.Reader) (trace *types.SimpleTrace, err error)
 	return
 }
 
-func readSimpleTraceAction(reader *bufio.Reader) (action *types.SimpleTraceAction, err error) {
+func readTraceAction(reader *bufio.Reader) (action *types.SimpleTraceAction, err error) {
 	action = &types.SimpleTraceAction{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -681,7 +687,7 @@ func readSimpleTraceAction(reader *bufio.Reader) (action *types.SimpleTraceActio
 		return
 	}
 
-	err = readJustString(reader, &action.CallType)
+	err = readString(reader, &action.CallType)
 	if err != nil {
 		return
 	}
@@ -696,12 +702,12 @@ func readSimpleTraceAction(reader *bufio.Reader) (action *types.SimpleTraceActio
 		return
 	}
 
-	err = readJustString(reader, &action.Init)
+	err = readString(reader, &action.Init)
 	if err != nil {
 		return
 	}
 
-	err = readJustString(reader, &action.Input)
+	err = readString(reader, &action.Input)
 	if err != nil {
 		return
 	}
@@ -724,7 +730,7 @@ func readSimpleTraceAction(reader *bufio.Reader) (action *types.SimpleTraceActio
 	return
 }
 
-func readSimpleTraceResult(reader *bufio.Reader) (result *types.SimpleTraceResult, err error) {
+func readTraceResult(reader *bufio.Reader) (result *types.SimpleTraceResult, err error) {
 	result = &types.SimpleTraceResult{}
 	read := createReadFn(reader)
 	err = readCacheHeader(reader, &cacheHeader{})
@@ -737,7 +743,7 @@ func readSimpleTraceResult(reader *bufio.Reader) (result *types.SimpleTraceResul
 		return
 	}
 
-	err = readJustString(reader, &result.Code)
+	err = readString(reader, &result.Code)
 	if err != nil {
 		return
 	}
@@ -747,7 +753,7 @@ func readSimpleTraceResult(reader *bufio.Reader) (result *types.SimpleTraceResul
 		return
 	}
 
-	err = readJustString(reader, &result.Output)
+	err = readString(reader, &result.Output)
 	if err != nil {
 		return
 	}
