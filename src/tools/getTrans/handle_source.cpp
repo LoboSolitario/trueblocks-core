@@ -28,14 +28,14 @@ bool visitSource(CTransaction& trans, void* data) {
     cout << bBlack << string_q(120, '-') << cOff << endl;
     COptions* opt = reinterpret_cast<COptions*>(data);
 
-    if (theMap[opt->statementManager.accountedFor]) {
-        cout << bRed << "Skipping -- seen it before: " << opt->statementManager.accountedFor << cOff << endl;
+    if (theMap[opt->ledgerManager.accountedFor]) {
+        cout << bRed << "Skipping -- seen it before: " << opt->ledgerManager.accountedFor << cOff << endl;
         return true;
     }
-    theMap[opt->statementManager.accountedFor] = true;
+    theMap[opt->ledgerManager.accountedFor] = true;
 
     cout << arrow(trans.to) << " " << trans.blockNumber << endl;
-    opt->statementManager.getStatements(trans);
+    opt->ledgerManager.getStatements(trans);
 
     for (auto statement : trans.statements) {
         if (theMap[statement.sender]) {
@@ -89,10 +89,10 @@ totalOutLessGas	prevAppBlk	prevBal	begBalDiff	endBalDiff	endBalCalc
                     address_t sender = values[13];
                     CTransaction tr;
                     getTransaction(tr, hash);
-                    opt->statementManager.getTransfers(tr);
-                    for (auto t : opt->statementManager.transfers) {
+                    opt->ledgerManager.getTransfers(tr);
+                    for (auto t : opt->ledgerManager.transfers) {
                     }
-                    opt->statementManager.accountedFor = opt->statementManager.transfers[0].sender;
+                    opt->ledgerManager.accountedFor = opt->ledgerManager.transfers[0].sender;
                     cout << nLines++ << ". " << values[0] << "." << values[1] << "-" << values[2] << " " << hash << " ["
                          << tr.hash << "]" << endl;
                     if (tr.hash != "") {
