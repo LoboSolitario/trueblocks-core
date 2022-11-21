@@ -14,7 +14,7 @@
 
 //-----------------------------------------------------------------------
 void COptions::addNeighbor(CAddressUintMap& map, const address_t& addr) {
-    if ((addr == statementManager.accountedFor || isZeroAddr(addr)))
+    if ((addr == ledgerManager.accountedFor || isZeroAddr(addr)))
         return;
     map[addr]++;
 }
@@ -74,6 +74,10 @@ inline bool operator<(const CNameStats& v1, const CNameStats& v2) {
 bool doOne(COptions* options, const CAddressUintMap& theMap, const string_q& type) {
     if (theMap.size() == 0)
         return false;
+
+    if (getEnvStr("HIDE_NAMES") == "true") {
+        return false;
+    }
 
     CNameStatsArray unnamed;
     CNameStatsArray named;

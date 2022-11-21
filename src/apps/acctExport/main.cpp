@@ -60,12 +60,6 @@ int main(int argc, const char* argv[]) {
                 traversers.push_back(rt);
             }
 
-            if (options.statements) {
-                CStatementTraverser st;
-                st.traverserRange = options.exportRange;
-                traversers.push_back(st);
-            }
-
             if (options.neighbors) {
                 CNeighborTraverser nt;
                 nt.traverserRange = options.exportRange;
@@ -90,7 +84,7 @@ int main(int argc, const char* argv[]) {
                 traversers.push_back(tt);
             }
 
-            forEveryAppearance(traversers, options.statementManager.appArray, &options);
+            forEveryAppearance(traversers, options.ledgerManager.appArray, &options);
 
         } else {
             options.handle_traversers();
@@ -107,9 +101,9 @@ int main(int argc, const char* argv[]) {
     os << ", \"last_block\": " << (isTestMode() ? "\"0xdeadbeef\"" : uint_2_Str(options.exportRange.second)) << endl;
     if (!options.count && options.allMonitors.size() == 1) {
         HIDE_FIELD(CMonitor, "abi_spec");
-        if (!findName(options.statementManager.accountedFor, options.allMonitors[0])) {
+        if (!findName(options.ledgerManager.accountedFor, options.allMonitors[0])) {
             blknum_t blk = min(options.exportRange.second, options.meta.client);
-            options.statementManager.name.isContract = isContractAt(options.allMonitors[0].address, blk);
+            options.ledgerManager.name.isContract = isContractAt(options.allMonitors[0].address, blk);
             options.allMonitors[0].petname = addr_2_Petname(options.allMonitors[0].address, '-');
             HIDE_FIELD(CAccountName, "isCustom");
             HIDE_FIELD(CAccountName, "isPrefund");
@@ -171,9 +165,9 @@ bool prog_Log(CTraverser* trav, void* data) {
         found << " (found " << trav->nProcessed << " " << trav->searchType << ")";
     }
 
-    LOG_PROG(searchOps[trav->searchOp], " ", opt->first_record + trav->index, " of ", opt->stats.nFileRecords,
-             " txs at block ", trav->trans.blockNumber, found.str(), " for address ",
-             opt->statementManager.accountedFor, "\r");
+    LOG_PROG(searchOps[opt->ledgerManager.searchOp], " ", opt->first_record + trav->index, " of ",
+             opt->stats.nFileRecords, " txs at block ", trav->trans.blockNumber, found.str(), " for address ",
+             opt->ledgerManager.accountedFor, "\r");
 
     return !shouldQuit();
 }
@@ -189,9 +183,9 @@ void end_Log(CTraverser* trav, void* data) {
         found << " (found " << trav->nProcessed << " " << trav->searchType << ")";
     }
 
-    LOG_PROG(searchOps[trav->searchOp], " ", opt->first_record + trav->index, " of ", opt->stats.nFileRecords,
-             " txs at block ", trav->trans.blockNumber, found.str(), " for address ",
-             opt->statementManager.accountedFor, "\r");
+    LOG_PROG(searchOps[opt->ledgerManager.searchOp], " ", opt->first_record + trav->index, " of ",
+             opt->stats.nFileRecords, " txs at block ", trav->trans.blockNumber, found.str(), " for address ",
+             opt->ledgerManager.accountedFor, "\r");
 
     return;
 }
@@ -211,10 +205,10 @@ bool loadTx_Func(CTraverser* trav, void* data) {
     bool inCache = trav->app->blk != 0 && fileExists(txFilename);
     if (inCache) {
         readTransFromBinary(trav->trans, txFilename);
-        trav->searchOp = searchOpType(READ);
+        opt->ledgerManager.searchOp = READ;
 
     } else {
-        trav->searchOp = EXTRACT;
+        opt->ledgerManager.searchOp = EXTRACT;
         dirty = true;
         if (trav->app->blk == 0) {
             address_t addr = opt->prefundAddrMap[trav->app->txid];

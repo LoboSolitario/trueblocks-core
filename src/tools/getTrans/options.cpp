@@ -109,10 +109,8 @@ bool COptions::parseArguments(string_q& command) {
         manageFields(defHide, false);
         manageFields(defShow, true);
         manageFields("CReconciliation:encoding,signature", true);
-        manageFields("CParameter:strDefault", false);  // hide
-        manageFields("CTransaction:price", false);     // hide
-        if (!useDict())
-            manageFields("CFunction:outputs", true);                                               // show
+        manageFields("CParameter:strDefault", false);                                              // hide
+        manageFields("CTransaction:price", false);                                                 // hide
         manageFields("CTransaction:input", true);                                                  // show
         manageFields("CLogEntry:data,topics", true);                                               // show
         manageFields("CTrace: blockHash, blockNumber, transactionHash, transactionIndex", false);  // hide
@@ -131,14 +129,13 @@ bool COptions::parseArguments(string_q& command) {
     if (!account_for.empty()) {
         if (!loadNames())
             return usage("Could not load names database.");
-        statementManager.which = trace ? REC_ALL : REC_SOME;
-        statementManager.accountedFor = account_for;
+        ledgerManager.accountedFor = account_for;
     }
 
     // Display formatting
     if (uniq) {
         configureDisplay("getTrans", "CAppearance", STR_DISPLAY_APPEARANCE);
-    } else if (!statementManager.accountedFor.empty()) {
+    } else if (!ledgerManager.accountedFor.empty()) {
         string_q fmt = STR_DISPLAY_RECONCILIATION;
         if (!articulate) {
             fmt = substitute(fmt, "[{ENCODING}]\t[{SIGNATURE}]\t", "");

@@ -17,56 +17,55 @@
 
 namespace qblocks {
 
-typedef enum {
-    REC_NONE = 0,
-    REC_TOP = (1 << 0),
-    REC_TOKENS = (1 << 1),
-    REC_TRACES = (1 << 2),
-    REC_SOME = (REC_TOP | REC_TOKENS),
-    REC_ALL = (REC_SOME | REC_TRACES),
-} recon_t;
-
-class CStatementManager {
-    struct CPreviousBalance {
-      public:
-        // address_t assetAddr;
-        blknum_t blockNumber;
-        bigint_t balance;
-        CPreviousBalance& operator=(const CReconciliation& ab) {
-            blockNumber = ab.blockNumber;
-            balance = ab.endBal;
-            return *this;
-        }
-        bool operator==(const CPreviousBalance& it) const {
-            return ((blockNumber == it.blockNumber) && (balance == it.balance));
-        }
-        bool operator!=(const CPreviousBalance& it) const {
-            return !operator==(it);
-        }
-    };
-    typedef map<string, CPreviousBalance> CPreviousBalanceMap;
-
+struct CLedgerEntry {
   public:
+    blknum_t blockNumber;
+    bigint_t balance;
+    CLedgerEntry& operator=(const CReconciliation& ab) {
+        blockNumber = ab.blockNumber;
+        balance = ab.endBal;
+        return *this;
+    }
+    bool operator==(const CLedgerEntry& it) const {
+        return ((blockNumber == it.blockNumber) && (balance == it.balance));
+    }
+    bool operator!=(const CLedgerEntry& it) const {
+        return !operator==(it);
+    }
+};
+typedef map<string, CLedgerEntry> CLedgerEntryMap;
+
+typedef enum { EXTRACT = 0, READ, UPDATE, RECONCILE, SCANNING, SKIPPING, COMPLETE } searchOpType;
+
+class CLedgerManager {
+  public:
+    searchOpType searchOp;
     CAccountName name;
     address_t accountedFor;
-    blknum_t prevBlock{0};
     blknum_t nextBlock{NOPOS};
-    bigint_t prevBal{0};
-    recon_t which{REC_NONE};
-    CAddressBoolMap assetFilter;
     CAppearanceArray_mon appArray;
-    CPreviousBalanceMap previousBalances;
-    CTransferArray transfers;
-    void getPrevNext(bool simple, size_t index, const CTransaction& trans);
+    void getPrevNext(size_t index, const CTransaction& trans);
     bool getTransfers(const CTransaction& trans);
     bool getStatements(CTransaction& trans);
-
-    CStatementManager(const address_t& aF) {
+    CLedgerManager(const address_t& aF) {
         accountedFor = aF;
+        searchOp = EXTRACT;
     };
+    bool isFilterOn(void) const {
+        return assetFilter.size() != 0;
+    }
+    bool filterByAsset(const address_t& asset) {
+        return (!isFilterOn() || assetFilter[asset]);
+    }
+    void setAssetFilter(const address_t& asset) {
+        assetFilter[asset] = true;
+    }
 
   private:
-    CStatementManager(){};
+    CAddressBoolMap assetFilter;
+    CLedgerManager(){};
+    CLedgerEntryMap ledgers;
+    CTransferArray transfers;
 };
 
 }  // namespace qblocks
