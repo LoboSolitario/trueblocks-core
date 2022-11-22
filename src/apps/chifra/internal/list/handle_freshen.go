@@ -168,7 +168,7 @@ func (opts *ListOptions) HandleFreshenMonitors(monitorArray *[]monitor.Monitor) 
 		rng := paths.RangeFromFilename(stageFn)
 		lines := []string{}
 		for addr, mon := range updater.MonitorMap {
-			if !rng.LaterThanB(uint64(mon.LastScanned)) { // the range preceeds the block number
+			if true { // the range preceeds the block number
 				if len(lines) == 0 {
 					lines = file.AsciiFileToLines(stageFn)
 					sort.Slice(lines, func(i, j int) bool {
